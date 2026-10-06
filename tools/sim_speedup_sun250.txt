@@ -1,0 +1,94 @@
+# Patches applied to Inputs/boot0.rom to make simulation tractable.
+#
+# The same two changes sim_speedup.txt makes to the MultiBus PROM, at the
+# addresses this one uses.  Unlike that file these are not reproducing any
+# previously known image -- there is no old working 2/50 build to match -- they
+# are derived here, and rompatch's expected-value check is what keeps them
+# honest.
+#
+# Line format: <address> <expected> <new>   (hex, 16-bit words, PROM at 0xef0000)
+
+# The LED walk's delay, as at ef0b7c on the MultiBus PROM:
+#
+#   ef0b66  movew #32767,%d7
+#   ef0b68  movesb %d7,0xb        <- write the front panel LEDs
+#   ef0b6c  movel #50000,%d0
+#   ef0b72  subql #1,%d0
+#   ef0b74  bnew ef0b72
+#   ef0b78  rolw #1,%d7           <- walk the lit LED along
+#
+# Shorten the count to 2: it is pure wall-clock delay and 50000 iterations of
+# it dominate simulated time.
+#
+# Note both PROMs contain this instruction TWICE with identical surrounding
+# bytes -- the other copy (ef0b52 MultiBus, ef0b42 here) is the error path,
+# `addql #1,%d3` then delay then `jmp %a0@`, which only runs when a test fails.
+# Patching that one changes nothing on a good boot; it is the second copy that
+# matters.  rompatch's expected-value check cannot tell them apart, since the
+# bytes are the same.
+ef0b70 c350 0002
+
+# ef0e62  moveq #-114,%d0      <- entry of the destructive main memory test.
+#                                 The seven words here are byte-identical to the
+#                                 MultiBus PROM's at ef0e80.
+# Replace with `jmp %pc@(0xef01b4)`, the instruction after the call site at
+# ef01b0 (`jmp %pc@(0xef0b50)`) -- the same relationship the MultiBus patch
+# uses between ef0e80 and ef01b6.  The test walks all of RAM several times and
+# is hopeless to simulate; the memory model is trustworthy by construction.
+#
+#   displacement: 0xef01b4 - (0xef0e62 + 2) = -3248 = 0xf350
+ef0e62 708e 4efa
+ef0e64 0e38 f350
+
+# ef4012  the poll inside iereset(), sys/sunif/if_ie.c:
+#
+#   for (i = 0; i < 100000; i++)
+#           if (iscp->ie_busy != 1) { gotit = 1; break; }
+#
+#   ef400c  ...
+#   ef4010  cmpil #100000,%fp@(-20)   <- immediate long at ef4012/ef4014
+#   ef4018  bges  ...
+#
+# On a VME machine ieprobe() reports Ethernet present from the ID PROM's
+# machine-type byte alone, without touching the hardware, so `ie' always joins
+# the boot device list and auto-boot always calls iereset().  With no 82586
+# behind the control register the ISCP busy flag never clears, and the driver
+# grinds through 100000 polls ten times over before printing "ie: cannot
+# initialize" and moving on.  A real 2/50 with no network does exactly the
+# same, and takes a second or so over it; simulated, it does not finish inside
+# any sane timeout.
+#
+# Cut the count to 1000.  With a working 82586 the loop exits on the first or
+# second pass, so this costs nothing; without one it bounds the ten retries at
+# about 75 ms of simulated time instead of ten seconds.
+#
+# Do not cut it much further.  The chip has real work to do inside this window
+# -- fetch the SCP, read the ISCP, write the busy byte back -- and every one of
+# those is a DVMA cycle arbitrated against the CPU.  At two iterations, which is
+# what this said while page 0xFE1 was still a stub, a perfectly good controller
+# looks broken.
+ef4012 0001 0000
+ef4014 86a0 03e8
+
+# ef4d40  the retry count in ndread(), mon/prom2/nd.c:
+#
+#   for (i = 0; i < limit; i++) {
+#           ndxmit(sip);
+#           if ((ok = ndrecv(sip)) >= 0) break;
+#           printf("?\b");
+#   }
+#   if (i == limit) { printf("nd: no file server, giving up.\n"); return (-1); }
+#
+#   ef4d3c  movel #500,%fp@(-16)      <- immediate long at ef4d3e/ef4d40
+#
+# Each pass broadcasts an ND read request and waits two seconds of NMI-clock
+# time for an answer, then resets the whole chip.  With no server on the wire
+# that is 500 x ~0.8 s of simulated time -- several minutes of it -- before the
+# monitor gives up and returns to the prompt.
+#
+# Cut it to 3.  The behaviour is identical, just reached sooner: the machine
+# still sends real frames, still times out on each, still prints its "?" per
+# attempt and still ends at "nd: no file server, giving up."  Put a server on
+# the other end of tb/mii_peer.sv and the first pass would succeed regardless
+# of this count.
+ef4d40 01f4 0003
