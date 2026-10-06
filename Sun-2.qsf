@@ -1,0 +1,112 @@
+# --------------------------------------------------------------------------
+#
+# MiSTer project: Sun-2 Workstation
+#
+# WARNING WARNING WARNING:
+# Do not add files to project in Quartus IDE! It will mess this file!
+# Add the files manually to files.qip file.
+#
+# --------------------------------------------------------------------------
+
+set_global_assignment -name TOP_LEVEL_ENTITY sys_top
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+
+set_global_assignment -name LAST_QUARTUS_VERSION "17.0.2 Lite Edition"
+
+set_global_assignment -name GENERATE_RBF_FILE ON
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name SAVE_DISK_SPACE OFF
+set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP "-40"
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS OFF
+set_global_assignment -name OPTIMIZE_POWER_DURING_FITTING OFF
+set_global_assignment -name FINAL_PLACEMENT_OPTIMIZATION ALWAYS
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+set_global_assignment -name ALLOW_POWER_UP_DONT_CARE ON
+set_global_assignment -name QII_AUTO_PACKED_REGISTERS NORMAL
+set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
+set_global_assignment -name OPTIMIZATION_TECHNIQUE SPEED
+set_global_assignment -name MUX_RESTRUCTURE ON
+set_global_assignment -name REMOVE_REDUNDANT_LOGIC_CELLS ON
+set_global_assignment -name AUTO_DELAY_CHAINS_FOR_HIGH_FANOUT_INPUT_PINS ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC_FOR_AREA ON
+set_global_assignment -name ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON
+set_global_assignment -name SYNTH_GATED_CLOCK_CONVERSION ON
+set_global_assignment -name PRE_MAPPING_RESYNTHESIS ON
+set_global_assignment -name ROUTER_CLOCKING_TOPOLOGY_ANALYSIS ON
+set_global_assignment -name ECO_OPTIMIZE_TIMING ON
+set_global_assignment -name PERIPHERY_TO_CORE_PLACEMENT_AND_ROUTING_OPTIMIZATION ON
+set_global_assignment -name PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING ON
+set_global_assignment -name ALM_REGISTER_PACKING_EFFORT MEDIUM
+set_global_assignment -name SEED 7
+
+# --------------------------------------------------------------------------
+# The machine.  This is the whole hardware configuration and it is fixed:
+# change it here and nowhere else.  Quartus discards the $fatal guards in
+# sun2_fpga.v, so nothing checks a combination at build time.
+#
+#   Sun-2/160 colour: the VME CPU board and its Rev Q boot PROM, the only
+#     Sun-2 PROM built with a colour console.  The PROM is NOT in the
+#     bitstream: the user supplies it as games/Sun-2/boot0.rom (32 KiB, the
+#     same image as Inputs/boot0.rom) and Main_MiSTer sends it on ioctl
+#     index 0 at start-up
+#   Sun VME SCSI board, sd0, on a MiSTer disk image
+#   on-board 1152x900 mono frame buffer, whose control register carries the
+#     colour jumper the PROM reads, and the on-board keyboard/mouse SCC
+#   cgtwo colour board, 1152x900x8, at VME 0x400000 -- NOT YET BUILT; it is
+#     next, framebuffer first and its raster-op units after
+#   on-board 82586 Ethernet, its wire a DDR3 mailbox to Main_MiSTer's Sun-2
+#     support (rtl/sun2_mister_enet.sv); the OSD's Network picks the host side
+#   RD68011 CPU core at 20 MHz (set by the PLL; nothing else depends on it)
+#   8 MiB of main memory in SDRAM, behind the cached FIFO bridge
+#
+# Plain names only: a sized literal such as 30'h03E00000 does not survive
+# VERILOG_MACRO, and every value below is already sun2_config.vh's default.
+# --------------------------------------------------------------------------
+set_global_assignment -name VERILOG_MACRO "SUN2_VME=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_VME_SCSI=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_FB=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_CGTWO=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_WB_FIFO=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_WB_CACHE=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_CPU_RD68011=1"
+set_global_assignment -name VERILOG_MACRO "SUN2_QUARTUS=1"
+# The PROM comes from boot0.rom at start-up, not from the bitstream (bootrom.v).
+set_global_assignment -name VERILOG_MACRO "SUN2_BOOTROM_LOAD=1"
+# The ID PROM may be overwritten at start-up, from boot1.rom (idprom.v).
+set_global_assignment -name VERILOG_MACRO "SUN2_IDPROM_LOAD=1"
+
+# `include search path: sun2_config.vh and sun2_attr.vh.
+set_global_assignment -name SEARCH_PATH rtl/sun2-common
+
+# Carried over from the DECA flow, the other Quartus build of this machine.
+# Quartus refuses a constant loop of more than 5000 iterations (Error 10106),
+# and has no per-register ASYNC_REG; sun2_attr.vh relies on the global one.
+set_global_assignment -name VERILOG_CONSTANT_LOOP_LIMIT 65536
+set_global_assignment -name SYNCHRONIZER_IDENTIFICATION "FORCED IF ASYNCHRONOUS"
+
+# Global clocks are scarce for the main PLL, which sits at the right edge of the
+# die: of the ones it can reach, the HPS's clocks and the HDMI ones take most,
+# leaving clk_mem, cpu_clk and clk_pix.  Anything else from it gets a regional
+# clock, a quarter of the die -- fine for clk_mii's few hundred registers, and
+# fatal for anything that has to reach the HPS (DDRAM_CLK) or that is as big as
+# the machine.  Forcing clk_mii onto a global once pushed cpu_clk onto a
+# regional clock instead, the whole machine into one quadrant, and the router
+# sat for hours at 117% congestion.  So DDRAM_CLK is clk_mem, and nothing new
+# should get its own clock from this PLL without checking "Global & Other Fast
+# Signals" in the fit report.
+
+source sys/sys.tcl
+source sys/sys_analog.tcl
+source files.qip
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
