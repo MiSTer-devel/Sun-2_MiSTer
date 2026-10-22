@@ -11,11 +11,13 @@ from tape and running SunView in colour.
 The machine was first a replica on a QMTech Wukong and an Arrow DECA, and this
 core was ported from it. That work -- the board-era simulation flows and
 testbenches, the boot-block probes and tools, and the long record of what was
-found and how -- lives in the development repository,
-**https://github.com/danifunker/Sun-2_MiSTer**. This repository holds what
-builds the core, what a user needs to run it, the Verilator tests for the
-MiSTer core, and the docs the README links to. When this file says "the dev
-repo", it means that one.
+found and how -- lived in a separate development repository, which has been
+retired. The core's home is this repository,
+**https://github.com/MiSTer-devel/Sun-2_MiSTer**, which holds what builds the
+core, what a user needs to run it, the Verilator tests for the MiSTer core,
+and the docs the README links to. When this file says "the dev repo", it means
+that retired one: its board-era tools (`tools/pcsym`, `tools/ufsread`, the
+boot-block probes, the PROM disassembly) are not in this tree.
 
 ## Building
 
