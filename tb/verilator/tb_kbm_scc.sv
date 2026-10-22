@@ -45,7 +45,7 @@ reg  [24:0] ps2_mouse = 0;
 wire        kbm_rxda, kbm_txda, kbm_rxdb, kbm_txdb;
 
 sun2_mister_kbd_mouse #(.CLK_HZ(20_000_000)) bridge (
-    .clk(clk), .rst(rst), .ps2_key(ps2_key), .ps2_mouse(ps2_mouse),
+    .clk(clk), .rst(rst), .ps2_key(ps2_key), .ps2_mouse(ps2_mouse), .stop_a(1'b0),
     .kbd_ser_tx(kbm_rxda), .kbd_ser_rx(kbm_txda), .mouse_ser_tx(kbm_rxdb), .beeper());
 
 // ---- the SCC, as sun2_fpga.v builds `keybmouse' -----------------------------

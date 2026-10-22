@@ -47,8 +47,8 @@ The names are free -- the OSD browses for them -- as long as disks end in
 
 ## 2. Mount them
 
-In the OSD (F12): *SCSI disk (sd0)* `sd0.img`, *Tape (st0)*
-`sunos-4.0-sun2.qic`, *Tape volume* `1`, then *Reset*.
+In the OSD (F12): *Pri. disk (ID 0)* `sd0.img`, *Tape (ID 4)*
+`sunos-4.0-sun2.qic`, *Tape volume* `1`, then *Apply and reset*.
 
 ```
 Boot: sd(0,0,0)vmunix

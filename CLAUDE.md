@@ -193,8 +193,12 @@ of it. Main depends on the following, so **changing any of them breaks it**:
 
 * **The core's name is `Sun-2`.** It is the first field of `CONF_STR`, and
   Main's core table is keyed on it.
-* **`status[11:9]` is the OSD's *Network*:** eth0 (0, the default), Off, eth1,
-  macvlan, tap0, in the SPARCstation core's order. Main reads the same bits.
+* **`status[11:9]` is the OSD's *Network interface*:** eth0 (0, the default),
+  None (Off), eth1, macvlan, tap0, in the SPARCstation core's order. Main reads
+  the same bits, so the row acts at once and is not latched at reset like the
+  other settings. The OSD's layout is the workstation cores' standard
+  (HP9000-715_MiSTer's `docs/osd-standard.md`); `Sun-2.sv` lists every status
+  bit beside `CONF_STR`.
 * **ioctl index 0 is `boot0.rom`**, the 32 KiB PROM, as big-endian 16-bit
   words. The machine is held in reset until the whole image has arrived.
 * **ioctl index 64 is `boot1.rom`**, a 32-byte ID PROM written over the

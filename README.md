@@ -44,14 +44,33 @@ What a user needs:
   `releases/boot0.rom` and `Inputs/boot0.rom`). It is not in the bitstream.
   Main_MiSTer loads it at start-up, and the machine stays in reset until it
   has.
-* **A disk image** for the OSD's *SCSI disk (sd0)* entry, and to install onto
-  it, **a tape image** for *Tape (st0)* -- both described below.
+* **A disk image** for the OSD's *Pri. disk (ID 0)* entry, and to install onto
+  it, **a tape image** for *Tape (ID 4)* -- both described below.
+
+### The menu
+
+The OSD (F12) follows the layout the other workstation cores use. The top
+page holds the media -- *Pri. disk (ID 0)*, *Tape (ID 4)*, *Tape volume* and
+*Load ROM* -- then *Network interface*, then four pages:
+
+| page | holds |
+|---|---|
+| Machine | *Colour board*, and *Stop-A (abort)*: the Sun's L1-A, which drops SunOS to the monitor's `>` prompt |
+| Video | *Aspect ratio* and *Scale* |
+| Input | *Swap Alt/Win keys* |
+| Audio | *Keyboard bell* |
+
+Media, the network and Input take effect at once. **Every other setting waits
+for a reset**: while one differs from what the machine is running, the top
+page says *Changes pending*, and *Apply and reset* applies it. *Load ROM*
+boots another PROM image for this session only; a normal start loads
+`boot0.rom`.
 
 ### Disks and tapes
 
-**File names are yours to choose.** *SCSI disk (sd0)* and *Tape (st0)* in the
-OSD open MiSTer's file browser in `games/Sun-2/`; the names in brackets are
-SunOS's devices, not files. A disk must end in `.img` or `.vhd`, a tape in
+**File names are yours to choose.** *Pri. disk (ID 0)* and *Tape (ID 4)* in the
+OSD open MiSTer's file browser in `games/Sun-2/`; the IDs are the SCSI targets,
+which SunOS calls `sd0` and `st0`. A disk must end in `.img` or `.vhd`, a tape in
 `.qic`, and several of each can sit side by side to be swapped from the OSD.
 
 **Tapes.** A `.qic` is a QIC cartridge as blocks: 512-byte blocks in files, and
@@ -128,12 +147,12 @@ narrow border.
 
 The machine has the **Sun-2 colour board** (`cgtwo`): 1152×900, 256 colours
 from a palette of 16.7 million, and the raster-op chips SunView draws with.
-The OSD's *Colour board* (**On** by default) fits it and makes it the console:
+The OSD's *Colour board*, on the Machine page (**On** by default), fits it and makes it the console:
 the PROM's banner then says `Model Sun-2/160`, its text appears on the colour
 screen, and that is the screen shown. The mono frame buffer is still in the
 machine, as in a real 2/160, but is not displayed. *Off* is the machine without
 the board: the mono screen, and the banner's `Sun-2/50 or Sun-2/160`. Change
-it, then reset.
+it, then *Apply and reset*.
 
 SunOS needs a kernel with the colour driver to use it. **GENERIC** has one,
 and it says so at boot:
@@ -161,7 +180,7 @@ board's own drawing -- and what could be made faster are in
 ### Logging in, and SunView
 
 An installed disk boots by itself. The OSD remembers the image you last chose
-for *SCSI disk (sd0)* and mounts it again whenever the core starts, and the
+for *Pri. disk (ID 0)* and mounts it again whenever the core starts, and the
 PROM auto-boots `sd(0,0,0)vmunix` from whatever disk it finds there -- so once
 SunOS is installed, loading the core is all it takes. A reset does the same,
 and so does `b sd()` at the monitor's `>` prompt. It ends at
@@ -281,6 +300,11 @@ the disks, and `c` there resumes where the machine left off.
 | Windows keys | Meta, the Sun-2's "Left" and "Right" |
 | Left Alt, Caps Lock | Alt, Caps Lock |
 
+*Swap Alt/Win keys* (Input page) swaps each Alt with the Windows key beside it,
+so the key next to the space bar is Meta; the L-keys then come from Right Win
+with the F-keys. *Stop-A (abort)* on the Machine page sends L1-A without the
+chord.
+
 Right Alt sends nothing itself. An F-key keeps the meaning it went down with,
 so releasing Right Alt first cannot leave an L-key held. Scroll Lock and F12
 are MiSTer's own (keyboard emulation and the OSD) and are not passed on.
@@ -298,7 +322,7 @@ the real keyboard:
   it on. `click -n` turns it off again, and every reset does too.
 
 It is the keyboard's own pitch -- a 480 us period, about 2083 Hz -- as a square
-wave with its edges rounded off a little. **Keyboard bell** in the OSD sets the
+wave with its edges rounded off a little. **Keyboard bell**, on the OSD's Audio page, sets the
 level: Normal, Loud, Quiet or Off.
 
 ### The network, and the machine's identity
@@ -340,13 +364,13 @@ Main_MiSTer, which puts them on a host interface -- the same arrangement the
 NeXT and Minimig A2065 cores use, and the same mailbox and daemon as the
 SPARCstation core. **It needs a Main_MiSTer with Sun support**
 (`support/sun/`, Main_MiSTer branch `sun-family`; `releases/MiSTer` is one); without it the 82586 is on
-a cable to nowhere, and SunOS attaches `ie0` all the same. *Network* in the OSD
+a cable to nowhere, and SunOS attaches `ie0` all the same. *Network interface* in the OSD
 picks the host side, in the SPARCstation core's order:
 
-| Network | what it is |
+| Network interface | what it is |
 |---|---|
 | eth0 (the default) | MiSTer's own Ethernet port, shared: the Sun is a second machine on the LAN, with its own address |
-| Off | no cable |
+| None | no cable |
 | eth1 | a second port (a USB adapter), the Sun's alone |
 | macvlan | a virtual port on eth0 with the Sun's address |
 | tap0 | a tap interface on the MiSTer, for routing it yourself |
