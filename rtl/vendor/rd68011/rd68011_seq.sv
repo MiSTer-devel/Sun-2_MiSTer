@@ -554,6 +554,19 @@ module rd68011_seq #(
     ir_pc_nxt  = (commit && pf_adv)   ? irc_pc    : ir_pc;
     irc_nxt    = (commit && pf_fetch) ? rdata     : irc;
     irc_pc_nxt = (commit && pf_fetch) ? pc        : irc_pc;
+    // A fault after the looped instruction handed over to the DBcc -- the
+    // write half of a read-modify-write, which advances the pipe before its
+    // write -- leaves the pipe in loop mode's shape: ir is the DBcc, and irc
+    // is the DBcc too, because in loop mode nothing was fetched. If RTE does
+    // not put loop mode back, the DBcc then runs as an ordinary instruction
+    // and takes irc for its displacement: its own opcode. So turn the pipe
+    // back into the one an ordinary fetch would have left: the displacement,
+    // which loop mode is only ever entered with at minus four, one word on.
+    if (commit && (f_seq == rd68011_ucode_pkg::U_SEQ_RESUME) &&
+        !RTE_RESTORES_LOOP && (loop_pending == 2'b11)) begin
+      irc_nxt    = 16'hFFFC;
+      irc_pc_nxt = irc_pc + 32'd2;
+    end
     if (commit) begin
       unique case (f_dst)
         rd68011_ucode_pkg::U_DST_IR:     ;  // ir_nxt only -- see below
@@ -1255,6 +1268,12 @@ module rd68011_seq #(
     // own, so nothing above competes for this.
     if (commit && (f_seq == rd68011_ucode_pkg::U_SEQ_RESUME)) begin
       ea_latch_nxt = ea_save;
+    end
+    // ... and the prefetch pointer with it, past the displacement: see the
+    // matching repair to irc in the prefetch pipe.
+    if (commit && (f_seq == rd68011_ucode_pkg::U_SEQ_RESUME) &&
+        !RTE_RESTORES_LOOP && (loop_pending == 2'b11)) begin
+      pc_nxt = pc + 32'd2;
     end
     dbuf_nxt  = dbuf;
     reg_wdata = y;

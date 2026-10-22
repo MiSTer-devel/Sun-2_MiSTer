@@ -94,3 +94,4 @@ c5_pin_model_dump.txt
 # Verilator unit-test builds
 tb/verilator/obj_*/
 tb/verilator/run_*/
+tb/rd68011/obj/
