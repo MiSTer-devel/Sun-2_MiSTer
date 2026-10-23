@@ -17,6 +17,19 @@ Notes:
 * **One file is built from a patched copy instead**: `rd68011_shifter.sv`,
   from `rtl/patched/rd68011/` -- the copy here is left as upstream has it.
   `rtl/patched/README.md` says what changed and why.
+* **`rd68011/rd68011_seq.sv` differs from upstream `f768c7f`**: one local fix,
+  made here in place, until upstream takes it. Two blocks at `U_SEQ_RESUME`,
+  guarded by `!RTE_RESTORES_LOOP && loop_pending == 2'b11`. A read-modify-write
+  in loop mode (`and.l Dn,(An)+ ; dbf`) advances the pipe to the DBcc before
+  its write, and in loop mode that advance fetches nothing, so `irc` still
+  holds the DBcc's own opcode. A bus error on the write half, resumed without
+  loop mode (this build), ran the DBcc with that opcode as its displacement:
+  chesstool's SIGBUS under SunOS 4, from libpixrect's `mem_rop` filling a page
+  that came back from disk read-only. RESUME now leaves the pipe as an ordinary
+  fetch would: `irc` the displacement (loop mode is only entered with -4) and
+  `irc_pc` and `pc` one word on. `make -C tb/rd68011` is the test; its
+  supervisor-mode write-fault run fails without the fix. **Keep this change
+  when re-copying upstream** until upstream has it.
 * **RD68011** was pinned at `04cd25b` as a submodule. `f768c7f` is three
   commits later and differs from it in `rtl/` only by the licence and SPDX
   comment headers it added. The logic is identical, and the earlier commit

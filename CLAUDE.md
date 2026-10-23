@@ -11,11 +11,13 @@ from tape and running SunView in colour.
 The machine was first a replica on a QMTech Wukong and an Arrow DECA, and this
 core was ported from it. That work -- the board-era simulation flows and
 testbenches, the boot-block probes and tools, and the long record of what was
-found and how -- lives in the development repository,
-**https://github.com/danifunker/Sun-2_MiSTer**. This repository holds what
-builds the core, what a user needs to run it, the Verilator tests for the
-MiSTer core, and the docs the README links to. When this file says "the dev
-repo", it means that one.
+found and how -- lived in a separate development repository, which has been
+retired. The core's home is this repository,
+**https://github.com/MiSTer-devel/Sun-2_MiSTer**, which holds what builds the
+core, what a user needs to run it, the Verilator tests for the MiSTer core,
+and the docs the README links to. When this file says "the dev repo", it means
+that retired one: its board-era tools (`tools/pcsym`, `tools/ufsread`, the
+boot-block probes, the PROM disassembly) are not in this tree.
 
 ## Building
 
@@ -174,10 +176,13 @@ the qsf. Its order and file types matter:
 * `SEARCH_PATH rtl/sun2-common` is what finds `sun2_config.vh` and
   `sun2_attr.vh`.
 
-**Never edit `rtl/vendor/` or `sys/` in place.** Fix a vendored core upstream
-and copy it in again, updating `rtl/vendor/README.md`. If the build needs the
-fix sooner, the changed file goes in `rtl/patched/` under the same path, and
-`files.qip` points at it until upstream catches up. `sys/` is updated by copying
+**Never edit `rtl/vendor/` or `sys/` in place -- except RD68011.** Fix a
+vendored core upstream and copy it in again, updating `rtl/vendor/README.md`.
+If the build needs the fix sooner, the changed file goes in `rtl/patched/`
+under the same path, and `files.qip` points at it until upstream catches up.
+RD68011's own fixes are made directly in `rtl/vendor/rd68011/` (the user's
+call, 2026-10-22); each is listed in `rtl/vendor/README.md` with its test, so
+re-copying upstream must keep them until upstream has them. `sys/` is updated by copying
 a newer Template_MiSTer over it whole.
 
 ## The contract with Main_MiSTer
@@ -190,8 +195,12 @@ of it. Main depends on the following, so **changing any of them breaks it**:
 
 * **The core's name is `Sun-2`.** It is the first field of `CONF_STR`, and
   Main's core table is keyed on it.
-* **`status[11:9]` is the OSD's *Network*:** eth0 (0, the default), Off, eth1,
-  macvlan, tap0, in the SPARCstation core's order. Main reads the same bits.
+* **`status[11:9]` is the OSD's *Network interface*:** eth0 (0, the default),
+  None (Off), eth1, macvlan, tap0, in the SPARCstation core's order. Main reads
+  the same bits, so the row acts at once and is not latched at reset like the
+  other settings. The OSD's layout is the workstation cores' standard
+  (HP9000-715_MiSTer's `docs/osd-standard.md`); `Sun-2.sv` lists every status
+  bit beside `CONF_STR`.
 * **ioctl index 0 is `boot0.rom`**, the 32 KiB PROM, as big-endian 16-bit
   words. The machine is held in reset until the whole image has arrived.
 * **ioctl index 64 is `boot1.rom`**, a 32-byte ID PROM written over the
@@ -341,7 +350,11 @@ every 20 characters, so **a short typed line looks exactly like dead input**.
 of its bugs were found by this machine and are fixed upstream: a longword read
 torn by a bus grant between its halves, and `ea_latch` being destroyed while a
 fault frame was built, so a faulted push resumed at the wrong address. Every
-child process SunOS forked used to die of the second one. The dev repo also
+child process SunOS forked used to die of the second one. A third is fixed
+here, in `rd68011_seq.sv`: a loop-mode read-modify-write (`and.l Dn,(An)+ ;
+dbf`) faulted on its write half resumed its DBcc with the DBcc's own opcode as
+the displacement. That was chesstool's SIGBUS (libpixrect's `mem_rop`, a page
+back from disk read-only); `make -C tb/rd68011` is its test. The dev repo also
 builds Suska, whose bus error frames cannot restart an instruction.
 
 **The PROM is Rev Q VME** (`boot0.rom`, sha256 `8560ef68…4a3f`). It is built
@@ -381,6 +394,7 @@ they were last run with).
 make -C tb/verilator                  # the ten unit tests: about 5.5 minutes, each ends PASS
 make -C tb/verilator tb_emu           # the whole core: 3 simulated seconds, about 12 minutes
 make -C tb/verilator tb_cgtwo         # the colour board against SunOS's own libpixrect
+make -C tb/rd68011                    # RD68011's local fix: a faulted loop-mode RMW (iverilog, seconds)
 make -C tb/verilator clean; rm -rf build   # each compiled model is ~140 MB, a full set ~1.2 GB
 ```
 

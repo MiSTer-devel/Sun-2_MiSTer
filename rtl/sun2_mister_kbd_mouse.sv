@@ -24,7 +24,8 @@
 // is driven from -- is Right Alt held with F1..F10.  Right Alt itself sends
 // nothing (Left Alt is the Sun's Alt), and an F-key remembers how it went down,
 // so letting go of Right Alt first cannot leave an L-key held.  L1-A, the
-// abort to the monitor, is Right Alt+F1 then A.
+// abort to the monitor, is Right Alt+F1 then A.  The OSD's Stop-A button
+// (`stop_a') sends the same chord on its own: L1 down, A down, A up, L1 up.
 //
 // Not used, because MiSTer keeps them: Scroll Lock (keyboard-as-joystick
 // emulation), F12 (the OSD), F17..F20; and F13..F24 never reach a core.
@@ -72,6 +73,7 @@ module sun2_mister_kbd_mouse #(
 
     input  wire [10:0] ps2_key,         // hps_io: [10] toggle, [9] pressed, [8] E0, [7:0] code
     input  wire [24:0] ps2_mouse,       // hps_io: [24] toggle, [23:16] dy, [15:8] dx, [7:0] status
+    input  wire        stop_a,          // a rising edge sends L1-A, the abort to the monitor
 
     output wire        kbd_ser_tx,      // to the SCC's channel A receive
     input  wire        kbd_ser_rx,      // from the SCC's channel A transmit
@@ -283,6 +285,8 @@ module sun2_mister_kbd_mouse #(
     reg         idle_v = 1'b0;          // an IDLE to follow it
     reg         kpush = 1'b0;
     reg [7:0]   kdata = 8'h0;
+    reg         stop_a_d = 1'b0;
+    reg [2:0]   sa_step = 3'd0;         // Stop-A: the next byte of its chord, 0 = none
     assign k_push  = kpush;
     assign k_pdata = kdata;
 
@@ -293,6 +297,7 @@ module sun2_mister_kbd_mouse #(
     always @(posedge clk) begin
         key_s <= {key_s[1:0], ps2_key[10]};
         kpush <= 1'b0;
+        stop_a_d <= stop_a;
         beeper <= bell | (click_left != 0);
         if (click_left != 0) click_left <= click_left - 1'd1;
 
@@ -308,7 +313,10 @@ module sun2_mister_kbd_mouse #(
             bell   <= 1'b0;
             click_en   <= 1'b0;
             click_left <= '0;
+            sa_step    <= 3'd0;
         end else begin
+            if (stop_a && !stop_a_d && sa_step == 3'd0) sa_step <= 3'd1;
+
             // commands
             if (rx_valid) case (rx_byte)
                 8'h01: begin
@@ -366,6 +374,18 @@ module sun2_mister_kbd_mouse #(
                 else if (resp == 2'd1) begin kpush <= 1'b1; kdata <= 8'h03; resp <= 2'd0; end
                 else if (ev_v)         begin kpush <= 1'b1; kdata <= ev_b;  ev_v <= 1'b0; end
                 else if (idle_v)       begin kpush <= 1'b1; kdata <= 8'h7F; idle_v <= 1'b0; end
+                else if (sa_step != 3'd0) begin
+                    // L1 0x01 and A 0x4D, down then up; IDLE unless a real key is held
+                    kpush <= (sa_step != 3'd5) || (down == 128'd0);
+                    case (sa_step)
+                        3'd1: kdata <= 8'h01;
+                        3'd2: kdata <= 8'h4D;
+                        3'd3: kdata <= 8'hCD;
+                        3'd4: kdata <= 8'h81;
+                        default: kdata <= 8'h7F;
+                    endcase
+                    sa_step <= (sa_step == 3'd5) ? 3'd0 : sa_step + 3'd1;
+                end
             end
         end
     end

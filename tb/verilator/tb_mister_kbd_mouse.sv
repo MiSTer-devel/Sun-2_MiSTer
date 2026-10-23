@@ -27,12 +27,13 @@ reg rst = 1;
 
 reg  [10:0] ps2_key = 0;
 reg  [24:0] ps2_mouse = 0;
+reg         stop_a = 0;
 wire        kbd_tx, mouse_tx;
 reg         kbd_rx = 1;
 wire        beeper;
 
 sun2_mister_kbd_mouse #(.CLK_HZ(BT * 1200)) dut (
-    .clk(clk), .rst(rst), .ps2_key(ps2_key), .ps2_mouse(ps2_mouse),
+    .clk(clk), .rst(rst), .ps2_key(ps2_key), .ps2_mouse(ps2_mouse), .stop_a(stop_a),
     .kbd_ser_tx(kbd_tx), .kbd_ser_rx(kbd_rx), .mouse_ser_tx(mouse_tx), .beeper(beeper));
 
 integer passes = 0, fails = 0;
@@ -182,6 +183,10 @@ initial begin
     key(1, 1, 8'h11); key(1, 0, 8'h05); key(1, 0, 8'h1C); key(0, 0, 8'h1C); key(0, 0, 8'h05); key(0, 1, 8'h11);
     drain(6);
     expect_k('{8'h01, 8'h4D, 8'hCD, 8'h81, 8'h7F}, "Right Alt+F1 is L1, so L1-A is the abort");
+
+    // the OSD's Stop-A button: the same chord, once per press however long it is held
+    @(negedge clk); stop_a = 1; repeat (BT * 200) @(posedge clk); stop_a = 0; drain(6);
+    expect_k('{8'h01, 8'h4D, 8'hCD, 8'h81, 8'h7F}, "the Stop-A button sends L1-A, once");
 
     key(1, 1, 8'h11); key(1, 0, 8'h03); key(0, 1, 8'h11); key(1, 0, 8'h03); key(0, 0, 8'h03); drain(4);
     expect_k('{8'h31, 8'hB1, 8'h7F}, "F5 down as L5 stays L5 through Right Alt's release and a repeat");

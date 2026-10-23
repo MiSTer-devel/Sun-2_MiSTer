@@ -50,7 +50,26 @@ module emu
     assign LED_POWER = 2'b00;
 
     // ---- the OSD ---------------------------------------------------------------
-    // status[0] is the reset item and nothing else; the options start at 1.
+    // The computer cores' OSD standard (HP9000-715_MiSTer's
+    // docs/osd-standard.md): the media and Load ROM, then the network, then
+    // the submenus at their fixed page numbers (P1 Machine, P2 Video, P3
+    // Input, P4 Audio), then "Apply and reset".  Media, the network (Main
+    // reads it itself), Input and the buttons act at once; every other setting
+    // is latched into `cfg' while the machine is in reset, and "Changes
+    // pending" (menumask bit 0) shows while one differs from what is running.
+    //
+    //   status[0]     Apply and reset
+    //   status[2:1]   Aspect ratio        P2, at reset
+    //   status[4:3]   Tape volume         media, at once
+    //   status[6:5]   Scale               P2, at reset
+    //   status[8:7]   Keyboard bell       P4, at reset
+    //   status[11:9]  Network interface   at once; Main_MiSTer reads these bits
+    //   status[12]    Colour board        P1, at reset
+    //   status[13]    Stop-A              P1 button
+    //   status[14]    Swap Alt/Win keys   P3, at once
+    //
+    // v,1: Aspect ratio's third value was 4:3 and is [ARC1] now.
+    //
     // The disk is SC: Main_MiSTer remembers the image last chosen for it (in
     // config/Sun-2.s0) and mounts it again whenever the core starts, so the
     // PROM finds it and auto-boots SunOS with nothing selected by hand.  The
@@ -60,23 +79,50 @@ module emu
     `include "build_id.v"
     localparam CONF_STR = {
         "Sun-2;UART9600;",
-        "SC0,IMGVHD,SCSI disk (sd0);",
-        "S1,QIC,Tape (st0);",
+        "-;",
+        "SC0,IMGVHD,Pri. disk (ID 0);",
+        "S1,QIC,Tape (ID 4);",
         "O[4:3],Tape volume,1,2,3;",
+        "F0,ROM,Load ROM;",
         "-;",
-        "O[2:1],Aspect ratio,Original,Full Screen,4:3;",
-        "O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
+        "O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;",
         "-;",
-        "O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
-        "O[11:9],Network,eth0,Off,eth1,macvlan,tap0;",
-        "O[12],Colour board,On,Off;",
+        "P1,Machine;",
+        "P2,Video;",
+        "P3,Input;",
+        "P4,Audio;",
         "-;",
-        "R0,Reset;",
+        "h0-,Changes pending;",
+        "R[0],Apply and reset;",
+
+        "P1O[12],Colour board,On,Off;",
+        "P1-;",
+        "P1T[13],Stop-A (abort);",
+
+        "P2O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+        "P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
+
+        "P3O[14],Swap Alt/Win keys,No,Yes;",
+
+        "P4O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
+
+        "v,1;",
         "V,v",`BUILD_DATE
     };
 
     wire [127:0] status;
     wire [1:0]   buttons;
+
+    wire clk_mem, cpu_clk, clk_pix, clk_mii, clk_ser;    // from the PLLs, below
+
+    // The settings the machine runs with, taken while it is in reset (Apply
+    // and reset, the board's button, a core start, a ROM load); the reset
+    // logic below supplies the condition.
+    wire        cfg_take;
+    reg  [12:0] cfg = 13'd0;
+    always @(posedge clk_mem) if (cfg_take) cfg <= status[12:0];
+    wire cfg_pending = {status[12], status[8:7], status[6:5], status[2:1]}
+                    != {cfg[12],    cfg[8:7],    cfg[6:5],    cfg[2:1]};
 
     // The raster is 1160x904 (the 1152x900 screen and a small border, which
     // fb_scanout needs for its prefetch) of square pixels.  The aspect ratio
@@ -84,18 +130,17 @@ module emu
     // frame buffer.
     // V-Integer is the default, so it is listed first and its status value is
     // 0: video_freak's own numbering is 0 normal, 1 V-integer.
-    wire [1:0] ar    = status[2:1];
+    wire [1:0] ar    = cfg[2:1];
 
     // The colour board (doc/cgtwo.md).  On -- the default, status 0 -- fits it
     // and sets the colour jumper, so the PROM puts its console there and the
     // screen shows it; the mono board is still in the machine for SunOS.
     // Off is the machine without it.  Change it with a reset.
-    wire color_on = ~status[12];
-    wire [2:0] scale = (status[6:5] == 2'd0) ? 3'd1 :
-                       (status[6:5] == 2'd1) ? 3'd0 : {1'b0, status[6:5]};
+    wire color_on = ~cfg[12];
+    wire [2:0] scale = (cfg[6:5] == 2'd0) ? 3'd1 :
+                       (cfg[6:5] == 2'd1) ? 3'd0 : {1'b0, cfg[6:5]};
 
     // ---- clocks ------------------------------------------------------------------
-    wire clk_mem, cpu_clk, clk_pix, clk_mii, clk_ser;
     wire locked_main, locked_ser;
 
     pll pll (
@@ -145,7 +190,7 @@ module emu
 
         .buttons        (buttons),
         .status         (status),
-        .status_menumask(16'd0),
+        .status_menumask({15'd0, cfg_pending}),
 
         .ps2_key        (ps2_key),
         .ps2_mouse      (ps2_mouse),
@@ -227,6 +272,7 @@ module emu
     // ---- resets -----------------------------------------------------------------------
     // The machine: the OSD's reset, the framework's, an unlocked PLL, or no PROM yet.
     wire machine_reset_raw = status[0] | buttons[1] | RESET | ~locked | ~rom_loaded;
+    assign cfg_take = machine_reset_raw;
 
     wire reset_cpu;
     reset_sync rst_cpu (.clk(cpu_clk), .rst_async_in(machine_reset_raw), .rst_sync_out(reset_cpu));
@@ -241,11 +287,31 @@ module emu
     // ---- keyboard and mouse ---------------------------------------------------------
     wire kbm_rxda, kbm_txda, kbm_rxdb, beeper;
 
+    // Swap Alt/Win keys (P3, at once): left Alt <-> left GUI, right Alt <->
+    // right GUI, so the key beside the space bar is the Sun's Meta.  ps2_key
+    // [8] is E0, [7:0] the set-2 code; the toggle in [10] passes untouched.
+    function automatic [8:0] alt_win(input [8:0] k);
+        case (k)
+            9'h011:  alt_win = 9'h11F;
+            9'h11F:  alt_win = 9'h011;
+            9'h111:  alt_win = 9'h127;
+            9'h127:  alt_win = 9'h111;
+            default: alt_win = k;
+        endcase
+    endfunction
+    wire [10:0] kbd_key = status[14] ? {ps2_key[10:9], alt_win(ps2_key[8:0])} : ps2_key;
+
+    // Stop-A (P1): the OSD's pulse, into cpu_clk; the bridge acts on its edge.
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    reg [1:0] stop_a_s = 2'b00;
+    always @(posedge cpu_clk) stop_a_s <= {stop_a_s[0], status[13]};
+
     sun2_mister_kbd_mouse #(.CLK_HZ(20_000_000)) kbd_mouse (
         .clk          (cpu_clk),
         .rst          (reset_cpu),
-        .ps2_key      (ps2_key),
+        .ps2_key      (kbd_key),
         .ps2_mouse    (ps2_mouse),
+        .stop_a       (stop_a_s[1]),
         .kbd_ser_tx   (kbm_rxda),
         .kbd_ser_rx   (kbm_txda),
         .mouse_ser_tx (kbm_rxdb),
@@ -259,7 +325,7 @@ module emu
     sun2_mister_bell bell (
         .clk    (CLK_AUDIO),
         .beeper (beeper),
-        .volume (status[8:7]),
+        .volume (cfg[8:7]),
         .sample (bell_sample)
     );
 
@@ -729,7 +795,7 @@ module emu
     // A one-pixel font scaled by 1080/904 is a font whose strokes are one or two
     // pixels wide depending on where they land, and blurred between.  V-Integer
     // draws the 904 lines 1:1 at 1080p, with a border; Original keeps the
-    // pixels square, Full Screen fills the display, 4:3 is 4:3.
+    // pixels square, Full Screen fills the display, [ARC1] and [ARC2] are MiSTer.ini's custom ratios.
     video_freak video_freak (
         .CLK_VIDEO   (clk_pix),
         .CE_PIXEL    (1'b1),
@@ -740,8 +806,8 @@ module emu
         .VIDEO_ARX   (VIDEO_ARX),
         .VIDEO_ARY   (VIDEO_ARY),
         .VGA_DE_IN   (v_de),
-        .ARX         ((ar == 2'd0) ? 12'd1160 : (ar == 2'd2) ? 12'd4 : 12'd0),
-        .ARY         ((ar == 2'd0) ? 12'd904  : (ar == 2'd2) ? 12'd3 : 12'd0),
+        .ARX         ((ar == 2'd0) ? 12'd1160 : {10'd0, ar - 2'd1}),   // 0 fill, 1/2 ARC1/ARC2
+        .ARY         ((ar == 2'd0) ? 12'd904  : 12'd0),
         .CROP_SIZE   (12'd0),
         .CROP_OFF    (5'd0),
         .SCALE       (scale)
