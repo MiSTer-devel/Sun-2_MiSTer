@@ -28,7 +28,7 @@ see below), and **colour**: the Sun-2 colour board, which SunOS attaches as
 
 What a user needs:
 
-* **The core**, from [`releases/`](releases/): `Sun-2_20261004.rbf`, for
+* **The core**, from [`releases/`](releases/): `Sun-2_20261022.rbf`, for
   `_Computer/` (or `_Unstable/`). Beside it are `boot0.rom` (below) and
   `MiSTer`, a Main_MiSTer with Sun support for the network and the ID PROM:
   upstream Main_MiSTer `c97c052` with the `sun-family` branch (`de5e963`) of
